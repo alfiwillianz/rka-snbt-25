@@ -55,21 +55,21 @@ st.dataframe(stats_df, use_container_width=True)
 
 st.divider()
 
-# ---------- Practice Score Input ----------
-st.header("Enter Your Practice Scores")
-cols = st.columns(len(subtests))
-user_scores = {}
-for i, s in enumerate(subtests):
-    with cols[i]:
+# ---------- Side-by-side Layout ----------
+left_col, right_col = st.columns([1, 2])  # Left column smaller, right column larger
+
+with left_col:
+    # ---------- Practice Score Input ----------
+    st.header("Enter Your Practice Scores")
+    user_scores = {}
+    for s in subtests:
         default_val = float(np.median(df_2025[s]))
         user_scores[s] = st.number_input(
             s, min_value=0.0, max_value=1000.0, value=default_val, step=1.0
         )
 
-user_avg = float(np.mean(list(user_scores.values())))
-st.markdown(f"**Your avg:** `{user_avg:.2f}`")
-
-st.divider()
+    user_avg = float(np.mean(list(user_scores.values())))
+    st.markdown(f"**Your avg:** `{user_avg:.2f}`")
 
 # ---------- Helper function ----------
 def kde_fig(series, title, user_x=None):
@@ -144,20 +144,20 @@ def kde_fig(series, title, user_x=None):
     
     return fig
 
-# ---------- Visualization Analysis ----------
-st.header("KDE Distribution Analysis")
+with right_col:
+    # ---------- Visualization Analysis ----------
+    st.header("KDE Distribution Analysis")
 
+    selected = st.segmented_control("Choose subtest or avg", options=["avg"] + subtests, default="avg")
 
-selected = st.segmented_control("Choose subtest or avg", options=["avg"] + subtests, default="avg")
+    # Determine series & user value
+    if selected == "avg":
+        series = df_2025["avg"]
+        user_x = user_avg
+    else:
+        series = df_2025[selected]
+        user_x = user_scores[selected]
 
-# Determine series & user value
-if selected == "avg":
-    series = df_2025["avg"]
-    user_x = user_avg
-else:
-    series = df_2025[selected]
-    user_x = user_scores[selected]
-
-# Create and display the KDE plot
-kde_fig_plot = kde_fig(series, f"KDE Distribution of {selected} (2025)", user_x=user_x)
-st.plotly_chart(kde_fig_plot, use_container_width=True)
+    # Create and display the KDE plot
+    kde_fig_plot = kde_fig(series, f"KDE Distribution of {selected} (2025)", user_x=user_x)
+    st.plotly_chart(kde_fig_plot, use_container_width=True)
