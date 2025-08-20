@@ -126,6 +126,7 @@ def kde_fig(series, title, user_x=None):
 # ---------- Visualization Analysis ----------
 st.header("KDE Distribution Analysis")
 
+
 selected = st.segmented_control("Choose subtest or avg",
                                     options=["avg"] + subtests,
                                     index=0)
