@@ -126,13 +126,9 @@ def kde_fig(series, title, user_x=None):
 # ---------- Visualization Analysis ----------
 st.header("KDE Distribution Analysis")
 
-# Use segmented control; fallback to radio if Streamlit version is old
-try:
-    selected = st.segmented_control("Choose subtest or avg",
-                                      options=["avg"] + subtests,
-                                      index=0) # Note: 'default' is not a valid parameter, use 'index'
-except Exception:
-    selected = st.radio("Choose subtest or avg", options=["avg"] + subtests, index=0, horizontal=True)
+selected = st.segmented_control("Choose subtest or avg",
+                                    options=["avg"] + subtests,
+                                    index=0)
 
 # Determine series & user value
 if selected == "avg":
