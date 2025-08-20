@@ -4,6 +4,7 @@ import pandas as pd
 import numpy as np
 import plotly.express as px
 import plotly.graph_objects as go
+from scipy.stats import gaussian_kde
 
 st.set_page_config(page_title="SNBT RKA ITS – 2025 Subtest Explorer", layout="wide")
 
@@ -18,7 +19,6 @@ data_2025 = {
     "PM":  [660.28,633.32,651.71,761.07,774.04,790.31,623.09,756.42,795.70,861.76,882.04,843.63,832.05,876.79,835.38,673.32,731.21],
 }
 subtests = ["PU","PPU","PBM","PK","LBI","LBE","PM"]
-
 df_2025 = pd.DataFrame(data_2025)
 df_2025["avg"] = df_2025[subtests].mean(axis=1)
 
@@ -48,6 +48,31 @@ def band_label(p25, p50, p75, s):
     if s >= p25: return "🟧 Above 25% (possible)"
     return "🟥 Below 25% (stretch)"
 
+def kde_fig(series, title, user_x=None):
+    """Return a Plotly figure with a true KDE curve using scipy."""
+    x = np.asarray(series.dropna(), dtype=float)
+    # guard for degenerate case
+    if x.std() == 0:
+        xs = np.linspace(x.min()-1, x.max()+1, 200)
+        ys = np.zeros_like(xs)
+    else:
+        kde = gaussian_kde(x)  # Scott's rule bandwidth by default
+        padding = (x.max() - x.min()) * 0.1 or 1.0
+        xs = np.linspace(x.min() - padding, x.max() + padding, 400)
+        ys = kde(xs)
+
+    fig = go.Figure()
+    fig.add_trace(go.Scatter(x=xs, y=ys, mode="lines", name="KDE"))
+    fig.add_trace(go.Scatter(x=np.r_[xs, xs[::-1]],  # light fill
+                             y=np.r_[ys, np.zeros_like(ys)],
+                             fill="toself", name="",
+                             hoverinfo="skip", opacity=0.2, line=dict(width=0)))
+    if user_x is not None:
+        fig.add_vline(x=user_x, line_dash="dash",
+                      annotation_text=f"Your score: {user_x:.1f}", annotation_position="top left")
+    fig.update_layout(title=title, xaxis_title="Score", yaxis_title="Density", showlegend=False)
+    return fig
+
 # ---------- KPI row ----------
 k1, k2, k3, k4 = st.columns(4)
 k1.metric("Mean avg (2025)", f"{df_2025['avg'].mean():.2f}")
@@ -55,22 +80,17 @@ k2.metric("Median avg (p50)", f"{df_2025['avg'].median():.2f}")
 k3.metric("Top quartile (p75)", f"{df_2025['avg'].quantile(0.75):.2f}")
 k4.metric("Min–Max avg", f"{df_2025['avg'].min():.2f} – {df_2025['avg'].max():.2f}")
 
-# ---------- "KDE-like" Distribution of avg (no SciPy needed) ----------
-fig_kde = px.histogram(
-    df_2025, x="avg", nbins=30, histnorm="probability density",
-    opacity=0.75, marginal="violin", title="Distribution of avg (2025, density)"
-)
-fig_kde.add_vline(x=user_avg, line_dash="dash", annotation_text=f"Your avg: {user_avg:.1f}")
-st.plotly_chart(fig_kde, use_container_width=True)
+# ---------- KDE of avg (true KDE) ----------
+st.plotly_chart(kde_fig(df_2025["avg"], "KDE Distribution of avg (2025)", user_x=user_avg),
+                use_container_width=True)
 
 # ---------- ECDF of avg ----------
-rr_sorted = np.sort(df_2025["avg"].values)
-user_percentile = (rr_sorted <= user_avg).sum() / len(rr_sorted)
+sorted_avg = np.sort(df_2025["avg"].values)
+user_percentile = (sorted_avg <= user_avg).sum() / len(sorted_avg)
 fig_ecdf = px.ecdf(df_2025, x="avg", title="ECDF of avg (Percentiles, 2025)")
 fig_ecdf.add_vline(x=user_avg, line_dash="dash")
 fig_ecdf.add_annotation(x=user_avg, y=user_percentile,
-                        text=f"Your percentile ≈ {user_percentile*100:.1f}%",
-                        showarrow=True)
+                        text=f"Your percentile ≈ {user_percentile*100:.1f}%", showarrow=True)
 st.plotly_chart(fig_ecdf, use_container_width=True)
 
 # ---------- Boxplot per subtest ----------
@@ -78,16 +98,13 @@ long_2025 = df_2025[subtests].melt(var_name="Subtest", value_name="Score")
 fig_box = px.box(long_2025, x="Subtest", y="Score", title="Subtest Score Spread (2025)")
 st.plotly_chart(fig_box, use_container_width=True)
 
-# ---------- Density per subtest (no SciPy) ----------
-st.subheader("Subtest Distributions (2025, density)")
+# ---------- KDE per subtest (true KDE) ----------
+st.subheader("Subtest KDE Distributions (2025)")
 for s in subtests:
-    fig_sub = px.histogram(
-        df_2025, x=s, nbins=30, histnorm="probability density",
-        opacity=0.75, marginal="violin", title=f"Distribution of {s} (2025, density)"
+    st.plotly_chart(
+        kde_fig(df_2025[s], f"KDE of {s} (2025)", user_x=user_scores[s]),
+        use_container_width=True
     )
-    fig_sub.add_vline(x=user_scores[s], line_dash="dash",
-                      annotation_text=f"Your {s}: {user_scores[s]:.1f}")
-    st.plotly_chart(fig_sub, use_container_width=True)
 
 # ---------- Combined percentile table (subtests + avg highlighted) ----------
 st.subheader("Percentiles & Your Band (2025 Data)")
@@ -102,10 +119,10 @@ sub_pct = (
     .round(2)
     .loc[subtests]
 )
-sub_pct["Your score"] = [round(user_scores[s], 2) for s in sub_pct.index]
+sub_pct["Your score"] = [round(user_scores[s], 2) for s in subtests]
 sub_pct["Your band"] = [
     band_label(sub_pct.loc[s, "p25"], sub_pct.loc[s, "p50"], sub_pct.loc[s, "p75"], user_scores[s])
-    for s in sub_pct.index
+    for s in subtests
 ]
 
 # Append avg row
