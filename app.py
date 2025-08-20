@@ -21,8 +21,8 @@ df_2025 = pd.DataFrame(data_2025)
 df_2025["avg"] = df_2025[subtests].mean(axis=1)
 
 # ---------- Title ----------
-st.title("SNBT RKA ITS – 2025 Subtest Explorer")
-st.caption("This dashboard summarizes 2025 SNBT subtest data. Use as guidance, not a guarantee.")
+st.title("SNBT RKA ITS – 2025 Score")
+st.caption("Based on 2025 SNBT score data. Use as guidance, not a guarantee.")
 
 # ---------- Summary Statistics ----------
 st.header("Summary Statistics (2025)")
@@ -128,11 +128,11 @@ st.header("KDE Distribution Analysis")
 
 # Use segmented control; fallback to radio if Streamlit version is old
 try:
-    selected = st.selectbox("Choose subtest or avg",
+    selected = st.segmented_control("Choose subtest or avg",
                                       options=["avg"] + subtests,
-                                      index=0)
+                                      index=0) # Note: 'default' is not a valid parameter, use 'index'
 except Exception:
-    selected = st.radio("Choose subtest or avg", options=["avg"] + subtests, index=0)
+    selected = st.radio("Choose subtest or avg", options=["avg"] + subtests, index=0, horizontal=True)
 
 # Determine series & user value
 if selected == "avg":
