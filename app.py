@@ -32,6 +32,27 @@ k2.metric("Median avg", f"{df_2025['avg'].median():.2f}")
 k3.metric("Top quartile (p75)", f"{df_2025['avg'].quantile(0.75):.2f}")
 k4.metric("Min–Max avg", f"{df_2025['avg'].min():.2f} – {df_2025['avg'].max():.2f}")
 
+# ---------- Detailed Statistics Table ----------
+st.header("Detailed Statistics by Subtest")
+stats_data = {}
+all_columns = subtests + ["avg"]
+
+for col in all_columns:
+    stats_data[col] = [
+        df_2025[col].min(),
+        df_2025[col].quantile(0.25),
+        df_2025[col].median(),
+        df_2025[col].quantile(0.75),
+        df_2025[col].max(),
+        df_2025[col].mean()
+    ]
+
+stats_df = pd.DataFrame(stats_data, 
+                       index=["Min", "25%", "Median", "75%", "Max", "Mean"])
+
+# Display the table with full width
+st.dataframe(stats_df, use_container_width=True)
+
 st.divider()
 
 # ---------- Practice Score Input ----------
