@@ -1,4 +1,3 @@
-# app.py
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -25,21 +24,11 @@ df_2025["avg"] = df_2025[subtests].mean(axis=1)
 # ---------- Title ----------
 st.title("SNBT RKA ITS – 2025 Subtest Explorer")
 
-# ---------- Inputs at TOP ----------
-st.header("Enter Your Practice Scores")
-cols = st.columns(len(subtests))
+# Initialize user scores with defaults for the KDE display
 user_scores = {}
-for i, s in enumerate(subtests):
-    with cols[i]:
-        default_val = float(np.median(df_2025[s]))
-        user_scores[s] = st.number_input(
-            s, min_value=0.0, max_value=1000.0, value=default_val, step=1.0
-        )
-
+for s in subtests:
+    user_scores[s] = float(np.median(df_2025[s]))
 user_avg = float(np.mean(list(user_scores.values())))
-st.markdown(f"**Your avg (auto):** `{user_avg:.2f}`")
-
-st.divider()
 
 # ---------- Helpers ----------
 def band_label(p25, p50, p75, s):
@@ -56,55 +45,71 @@ def kde_fig(series, title, user_x=None):
         xs = np.linspace(x.min()-1, x.max()+1, 200)
         ys = np.zeros_like(xs)
     else:
-        kde = gaussian_kde(x)  # Scott's rule bandwidth by default
+        kde = gaussian_kde(x)  # Scott's rule bandwidth
         padding = (x.max() - x.min()) * 0.1 or 1.0
         xs = np.linspace(x.min() - padding, x.max() + padding, 400)
         ys = kde(xs)
 
     fig = go.Figure()
     fig.add_trace(go.Scatter(x=xs, y=ys, mode="lines", name="KDE"))
-    fig.add_trace(go.Scatter(x=np.r_[xs, xs[::-1]],  # light fill
+    fig.add_trace(go.Scatter(x=np.r_[xs, xs[::-1]],
                              y=np.r_[ys, np.zeros_like(ys)],
-                             fill="toself", name="",
-                             hoverinfo="skip", opacity=0.2, line=dict(width=0)))
+                             fill="toself", opacity=0.2, line=dict(width=0),
+                             hoverinfo="skip", name=""))
     if user_x is not None:
         fig.add_vline(x=user_x, line_dash="dash",
-                      annotation_text=f"Your score: {user_x:.1f}", annotation_position="top left")
+                      annotation_text=f"Your score: {user_x:.1f}",
+                      annotation_position="top left")
     fig.update_layout(title=title, xaxis_title="Score", yaxis_title="Density", showlegend=False)
     return fig
 
+# ---------- KDE DISTRIBUTION ----------
+st.header("Explore KDE Distribution")
+
+# segmented control available in Streamlit 1.36+; fallback to radio if needed
+try:
+    selected = st.segmented_control("Choose subtest or avg",
+                                    options=["avg"] + subtests,
+                                    default="avg")
+except Exception:
+    selected = st.radio("Choose subtest or avg", options=["avg"] + subtests, index=0)
+
+# Determine series & user value
+if selected == "avg":
+    series = df_2025["avg"]
+    user_x = user_avg
+else:
+    series = df_2025[selected]
+    user_x = user_scores[selected]
+
+# Render KDE chart
+fig = kde_fig(series, f"KDE Distribution of {selected} (2025)", user_x=user_x)
+st.plotly_chart(fig, use_container_width=True)
+
+# ---------- Input scores below KDE ----------
+st.header("Enter Your Practice Scores")
+cols = st.columns(len(subtests))
+for i, s in enumerate(subtests):
+    with cols[i]:
+        default_val = user_scores[s]
+        user_scores[s] = st.number_input(
+            s, min_value=0.0, max_value=1000.0, value=default_val, step=1.0, key=f"input_{s}"
+        )
+
+user_avg = float(np.mean(list(user_scores.values())))
+st.markdown(f"**Your avg (auto):** `{user_avg:.2f}`")
+
+st.divider()
+
 # ---------- KPI row ----------
+st.subheader("Summary Statistics (2025)")
 k1, k2, k3, k4 = st.columns(4)
-k1.metric("Mean avg (2025)", f"{df_2025['avg'].mean():.2f}")
-k2.metric("Median avg (p50)", f"{df_2025['avg'].median():.2f}")
+k1.metric("Mean avg", f"{df_2025['avg'].mean():.2f}")
+k2.metric("Median avg", f"{df_2025['avg'].median():.2f}")
 k3.metric("Top quartile (p75)", f"{df_2025['avg'].quantile(0.75):.2f}")
 k4.metric("Min–Max avg", f"{df_2025['avg'].min():.2f} – {df_2025['avg'].max():.2f}")
 
-# ---------- KDE of avg (true KDE) ----------
-st.plotly_chart(kde_fig(df_2025["avg"], "KDE Distribution of avg (2025)", user_x=user_avg),
-                use_container_width=True)
-
-# ---------- ECDF of avg ----------
-sorted_avg = np.sort(df_2025["avg"].values)
-user_percentile = (sorted_avg <= user_avg).sum() / len(sorted_avg)
-fig_ecdf = px.ecdf(df_2025, x="avg", title="ECDF of avg (Percentiles, 2025)")
-fig_ecdf.add_vline(x=user_avg, line_dash="dash")
-fig_ecdf.add_annotation(x=user_avg, y=user_percentile,
-                        text=f"Your percentile ≈ {user_percentile*100:.1f}%", showarrow=True)
-st.plotly_chart(fig_ecdf, use_container_width=True)
-
-# ---------- Boxplot per subtest ----------
-long_2025 = df_2025[subtests].melt(var_name="Subtest", value_name="Score")
-fig_box = px.box(long_2025, x="Subtest", y="Score", title="Subtest Score Spread (2025)")
-st.plotly_chart(fig_box, use_container_width=True)
-
-# ---------- KDE per subtest (true KDE) ----------
-st.subheader("Subtest KDE Distributions (2025)")
-for s in subtests:
-    st.plotly_chart(
-        kde_fig(df_2025[s], f"KDE of {s} (2025)", user_x=user_scores[s]),
-        use_container_width=True
-    )
+st.divider()
 
 # ---------- Combined percentile table (subtests + avg highlighted) ----------
 st.subheader("Percentiles & Your Band (2025 Data)")
@@ -135,7 +140,7 @@ avg_row = pd.DataFrame(
 )
 combined = pd.concat([sub_pct, avg_row], axis=0)
 
-# Plotly table so we can highlight avg row
+# Plotly table with highlighted avg row
 header_vals = ["Subtest", "p25", "p50", "p75", "Your score", "Your band"]
 index_col = combined.index.tolist()
 cells_vals = [
@@ -146,19 +151,13 @@ cells_vals = [
     combined["Your score"].astype(str).tolist(),
     combined["Your band"].tolist(),
 ]
-
-row_colors = ["rgba(0,0,0,0)"] * (len(index_col) - 1) + ["rgba(255, 196, 0, 0.15)"]  # highlight avg
+row_colors = ["rgba(0,0,0,0)"] * (len(index_col) - 1) + ["rgba(255, 196, 0, 0.15)"]
 fill_colors = [row_colors] * len(header_vals)
-
-table = go.Figure(
-    data=[
-        go.Table(
-            header=dict(values=header_vals, fill_color="rgba(80,80,80,0.6)", align="left"),
-            cells=dict(values=cells_vals, fill_color=fill_colors, align="left")
-        )
-    ]
-)
+table = go.Figure(data=[go.Table(
+    header=dict(values=header_vals, fill_color="rgba(80,80,80,0.6)", align="left"),
+    cells=dict(values=cells_vals, fill_color=fill_colors, align="left")
+)])
 table.update_layout(title="Subtests + avg (highlighted)")
 st.plotly_chart(table, use_container_width=True)
 
-st.caption("This dashboard summarizes 2025 SNBT subtest data. Use as guidance, not a guarantee.")
+st.caption("This dashboard summarizes 2025 SNBT score data. Use as guidance, not a guarantee.")
