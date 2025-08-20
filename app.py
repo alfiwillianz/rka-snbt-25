@@ -23,23 +23,57 @@ df_2025["avg"] = df_2025[subtests].mean(axis=1)
 
 # ---------- Title ----------
 st.title("SNBT RKA ITS – 2025 Subtest Explorer")
+st.caption("This dashboard summarizes 2025 SNBT subtest data. Use as guidance, not a guarantee.")
 
-# Initialize user scores with defaults for the KDE display
+# ---------- Summary Statistics ----------
+st.header("Summary Statistics (2025)")
+k1, k2, k3, k4 = st.columns(4)
+k1.metric("Mean avg", f"{df_2025['avg'].mean():.2f}")
+k2.metric("Median avg", f"{df_2025['avg'].median():.2f}")
+k3.metric("Top quartile (p75)", f"{df_2025['avg'].quantile(0.75):.2f}")
+k4.metric("Min–Max avg", f"{df_2025['avg'].min():.2f} – {df_2025['avg'].max():.2f}")
+
+st.divider()
+
+# ---------- Practice Score Input ----------
+st.header("Enter Your Practice Scores")
+cols = st.columns(len(subtests))
 user_scores = {}
-for s in subtests:
-    user_scores[s] = float(np.median(df_2025[s]))
+for i, s in enumerate(subtests):
+    with cols[i]:
+        default_val = float(np.median(df_2025[s]))
+        user_scores[s] = st.number_input(
+            s, min_value=0.0, max_value=1000.0, value=default_val, step=1.0
+        )
+
 user_avg = float(np.mean(list(user_scores.values())))
+st.markdown(f"**Your avg (auto):** `{user_avg:.2f}`")
 
-# ---------- Helpers ----------
-def band_label(p25, p50, p75, s):
-    if s >= p75: return "🟩 Above 75% (strong)"
-    if s >= p50: return "🟨 Above median (competitive)"
-    if s >= p25: return "🟧 Above 25% (possible)"
-    return "🟥 Below 25% (stretch)"
+st.divider()
 
+# ---------- Helper function ----------
 def kde_fig(series, title, user_x=None):
     """Return a Plotly figure with a true KDE curve using scipy."""
     x = np.asarray(series.dropna(), dtype=float)
+    
+    # Calculate percentiles for the current series
+    p25, p50, p75 = np.percentile(x, [25, 50, 75])
+    
+    # Determine user's performance band
+    if user_x is not None:
+        if user_x >= p75:
+            band = "🟩 Above 75% (Strong)"
+            band_color = "green"
+        elif user_x >= p50:
+            band = "🟨 Above Median (Competitive)"
+            band_color = "orange"
+        elif user_x >= p25:
+            band = "🟧 Above 25% (Possible)"
+            band_color = "darkorange"
+        else:
+            band = "🟥 Below 25% (Stretch)"
+            band_color = "red"
+    
     # guard for degenerate case
     if x.std() == 0:
         xs = np.linspace(x.min()-1, x.max()+1, 200)
@@ -51,20 +85,39 @@ def kde_fig(series, title, user_x=None):
         ys = kde(xs)
 
     fig = go.Figure()
-    fig.add_trace(go.Scatter(x=xs, y=ys, mode="lines", name="KDE"))
+    fig.add_trace(go.Scatter(x=xs, y=ys, mode="lines", name="KDE", line=dict(color="blue", width=2)))
     fig.add_trace(go.Scatter(x=np.r_[xs, xs[::-1]],
                              y=np.r_[ys, np.zeros_like(ys)],
-                             fill="toself", opacity=0.2, line=dict(width=0),
-                             hoverinfo="skip", name=""))
+                             fill="toself", opacity=0.2, line=dict(width=0, color="blue"),
+                             hoverinfo="skip", name="", showlegend=False))
+    
+    # Add percentile lines
+    fig.add_vline(x=p25, line=dict(color="red", dash="dot", width=1), 
+                  annotation_text="25%", annotation_position="top")
+    fig.add_vline(x=p50, line=dict(color="orange", dash="dot", width=1),
+                  annotation_text="50%", annotation_position="top")
+    fig.add_vline(x=p75, line=dict(color="green", dash="dot", width=1),
+                  annotation_text="75%", annotation_position="top")
+    
     if user_x is not None:
-        fig.add_vline(x=user_x, line_dash="dash",
+        fig.add_vline(x=user_x, line=dict(color=band_color, dash="dash", width=3),
                       annotation_text=f"Your score: {user_x:.1f}",
                       annotation_position="top left")
-    fig.update_layout(title=title, xaxis_title="Score", yaxis_title="Density", showlegend=False)
+        
+        # Add performance assessment as subtitle
+        fig.update_layout(
+            title=f"{title}<br><span style='font-size:14px; color:{band_color}'>{band}</span>",
+            xaxis_title="Score", 
+            yaxis_title="Density", 
+            showlegend=False
+        )
+    else:
+        fig.update_layout(title=title, xaxis_title="Score", yaxis_title="Density", showlegend=False)
+    
     return fig
 
-# ---------- KDE DISTRIBUTION ----------
-st.header("Explore KDE Distribution")
+# ---------- KDE Distribution ----------
+st.header("KDE Distribution Analysis")
 
 # segmented control available in Streamlit 1.36+; fallback to radio if needed
 try:
@@ -82,82 +135,6 @@ else:
     series = df_2025[selected]
     user_x = user_scores[selected]
 
-# Render KDE chart
+# Render KDE chart with dynamic assessment
 fig = kde_fig(series, f"KDE Distribution of {selected} (2025)", user_x=user_x)
 st.plotly_chart(fig, use_container_width=True)
-
-# ---------- Input scores below KDE ----------
-st.header("Enter Your Practice Scores")
-cols = st.columns(len(subtests))
-for i, s in enumerate(subtests):
-    with cols[i]:
-        default_val = user_scores[s]
-        user_scores[s] = st.number_input(
-            s, min_value=0.0, max_value=1000.0, value=default_val, step=1.0, key=f"input_{s}"
-        )
-
-user_avg = float(np.mean(list(user_scores.values())))
-st.markdown(f"**Your avg (auto):** `{user_avg:.2f}`")
-
-st.divider()
-
-# ---------- KPI row ----------
-st.subheader("Summary Statistics (2025)")
-k1, k2, k3, k4 = st.columns(4)
-k1.metric("Mean avg", f"{df_2025['avg'].mean():.2f}")
-k2.metric("Median avg", f"{df_2025['avg'].median():.2f}")
-k3.metric("Top quartile (p75)", f"{df_2025['avg'].quantile(0.75):.2f}")
-k4.metric("Min–Max avg", f"{df_2025['avg'].min():.2f} – {df_2025['avg'].max():.2f}")
-
-st.divider()
-
-# ---------- Combined percentile table (subtests + avg highlighted) ----------
-st.subheader("Percentiles & Your Band (2025 Data)")
-
-# Build subtest percentiles
-long = df_2025[subtests].melt(var_name="Subtest", value_name="Score")
-sub_pct = (
-    long.groupby("Subtest")["Score"]
-    .quantile([0.25, 0.5, 0.75])
-    .unstack()
-    .rename(columns={0.25: "p25", 0.5: "p50", 0.75: "p75"})
-    .round(2)
-    .loc[subtests]
-)
-sub_pct["Your score"] = [round(user_scores[s], 2) for s in subtests]
-sub_pct["Your band"] = [
-    band_label(sub_pct.loc[s, "p25"], sub_pct.loc[s, "p50"], sub_pct.loc[s, "p75"], user_scores[s])
-    for s in subtests
-]
-
-# Append avg row
-p25, p50, p75 = (df_2025["avg"].quantile(q) for q in (0.25, 0.5, 0.75))
-avg_band = band_label(p25, p50, p75, user_avg)
-avg_row = pd.DataFrame(
-    {"p25": [round(p25, 2)], "p50": [round(p50, 2)], "p75": [round(p75, 2)],
-     "Your score": [round(user_avg, 2)], "Your band": [avg_band]},
-    index=["avg"]
-)
-combined = pd.concat([sub_pct, avg_row], axis=0)
-
-# Plotly table with highlighted avg row
-header_vals = ["Subtest", "p25", "p50", "p75", "Your score", "Your band"]
-index_col = combined.index.tolist()
-cells_vals = [
-    index_col,
-    combined["p25"].astype(str).tolist(),
-    combined["p50"].astype(str).tolist(),
-    combined["p75"].astype(str).tolist(),
-    combined["Your score"].astype(str).tolist(),
-    combined["Your band"].tolist(),
-]
-row_colors = ["rgba(0,0,0,0)"] * (len(index_col) - 1) + ["rgba(255, 196, 0, 0.15)"]
-fill_colors = [row_colors] * len(header_vals)
-table = go.Figure(data=[go.Table(
-    header=dict(values=header_vals, fill_color="rgba(80,80,80,0.6)", align="left"),
-    cells=dict(values=cells_vals, fill_color=fill_colors, align="left")
-)])
-table.update_layout(title="Subtests + avg (highlighted)")
-st.plotly_chart(table, use_container_width=True)
-
-st.caption("This dashboard summarizes 2025 SNBT score data. Use as guidance, not a guarantee.")
