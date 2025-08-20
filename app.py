@@ -127,7 +127,7 @@ def kde_fig(series, title, user_x=None):
 st.header("KDE Distribution Analysis")
 
 
-selected = st.segmented_control("Choose subtest or avg", options=["avg"] + subtests)
+selected = st.segmented_control("Choose subtest or avg", options=["avg"] + subtests, default="avg")
 
 # Determine series & user value
 if selected == "avg":
