@@ -21,11 +21,11 @@ df_2025 = pd.DataFrame(data_2025)
 df_2025["avg"] = df_2025[subtests].mean(axis=1)
 
 # ---------- Title ----------
-st.title("SNBT RKA ITS – 2025 Score")
-st.caption("Based on 2025 SNBT score data. Use as guidance, not a guarantee.")
+st.title("SNBT RKA ITS – 2025 Score Explorer")
+st.caption("Explore how your practice scores compare to 2025 SNBT data. Use as guidance, not a guarantee.")
 
 # ---------- Summary Statistics ----------
-st.header("Summary Statistics (2025)")
+st.header("📊 Quick Stats Overview")
 k1, k2, k3, k4 = st.columns(4)
 k1.metric("Mean avg", f"{df_2025['avg'].mean():.2f}")
 k2.metric("Median avg", f"{df_2025['avg'].median():.2f}")
@@ -33,7 +33,7 @@ k3.metric("Top quartile (p75)", f"{df_2025['avg'].quantile(0.75):.2f}")
 k4.metric("Min–Max avg", f"{df_2025['avg'].min():.2f} – {df_2025['avg'].max():.2f}")
 
 # ---------- Detailed Statistics Table ----------
-st.header("Detailed Statistics by Subtest")
+st.header("📈 Detailed Breakdown by Subtest")
 stats_data = {}
 all_columns = subtests + ["avg"]
 
@@ -60,7 +60,7 @@ left_col, right_col = st.columns([1, 2])  # Left column smaller, right column la
 
 with left_col:
     # ---------- Practice Score Input ----------
-    st.header("Enter Your Practice Scores")
+    st.header("✏️ Your Practice Scores")
     user_scores = {}
     for s in subtests:
         default_val = float(np.median(df_2025[s]))
@@ -69,7 +69,7 @@ with left_col:
         )
 
     user_avg = float(np.mean(list(user_scores.values())))
-    st.markdown(f"**Your avg:** `{user_avg:.2f}`")
+    st.markdown(f"**🎯 Your average:** `{user_avg:.2f}`")
 
 # ---------- Helper function ----------
 def kde_fig(series, title, user_x=None):
@@ -146,9 +146,9 @@ def kde_fig(series, title, user_x=None):
 
 with right_col:
     # ---------- Visualization Analysis ----------
-    st.header("KDE Distribution Analysis")
+    st.header("📊 How would your score perform?")
 
-    selected = st.segmented_control("Choose subtest or avg", options=["avg"] + subtests, default="avg")
+    selected = st.segmented_control("Choose subtest", options=["avg"] + subtests, default="avg")
 
     # Determine series & user value
     if selected == "avg":
