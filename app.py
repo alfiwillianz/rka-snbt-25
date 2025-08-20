@@ -1,7 +1,6 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
-import plotly.express as px
 import plotly.graph_objects as go
 from scipy.stats import gaussian_kde
 
@@ -51,52 +50,7 @@ st.markdown(f"**Your avg:** `{user_avg:.2f}`")
 
 st.divider()
 
-# ---------- Helper functions ----------
-def create_bar_plot(selected, user_scores, user_avg):
-    """Create a bar plot showing user score vs percentiles"""
-    if selected == "avg":
-        series = df_2025["avg"]
-        user_score = user_avg
-    else:
-        series = df_2025[selected]
-        user_score = user_scores[selected]
-    
-    # Calculate percentiles
-    p25, p50, p75 = np.percentile(series, [25, 50, 75])
-    
-    # Create bar plot data
-    categories = ['25th Percentile', '50th Percentile', '75th Percentile', 'Your Score']
-    values = [p25, p50, p75, user_score]
-    colors = ['red', 'orange', 'green', 'blue']
-    
-    fig = go.Figure(data=[
-        go.Bar(x=categories, y=values, marker_color=colors, text=values, texttemplate='%{text:.1f}', textposition='outside')
-    ])
-    
-    # Determine user's performance band for title
-    if user_score >= p75:
-        band = "🟩 Above 75% (Strong)"
-        band_color = "green"
-    elif user_score >= p50:
-        band = "🟨 Above Median (Competitive)"
-        band_color = "orange"
-    elif user_score >= p25:
-        band = "🟧 Above 25% (Possible)"
-        band_color = "darkorange"
-    else:
-        band = "🟥 Below 25% (Stretch)"
-        band_color = "red"
-    
-    fig.update_layout(
-        title=f"Score Comparison: {selected} (2025)<br><span style='font-size:14px; color:{band_color}'>{band}</span>",
-        xaxis_title="Percentile Categories",
-        yaxis_title="Score",
-        showlegend=False,
-        yaxis=dict(range=[0, max(values) * 1.1])
-    )
-    
-    return fig
-
+# ---------- Helper function ----------
 def kde_fig(series, title, user_x=None):
     """Return a Plotly figure with a true KDE curve using scipy."""
     x = np.asarray(series.dropna(), dtype=float)
@@ -128,19 +82,16 @@ def kde_fig(series, title, user_x=None):
     else:
         kde = gaussian_kde(x)  # Scott's rule bandwidth
 
-        # --- FIX: DYNAMICALLY CALCULATE PLOT RANGE ---
-        # Determine the overall min/max including the user's score for the plot's range
+        # Dynamically calculate plot range to include user's score
         plot_min = x.min()
         plot_max = x.max()
         if user_x is not None:
             plot_min = min(plot_min, user_x)
             plot_max = max(plot_max, user_x)
 
-        # Add some padding to the range for better visualization
         padding = (plot_max - plot_min) * 0.1 or 1.0
         xs = np.linspace(plot_min - padding, plot_max + padding, 400)
         ys = kde(xs)
-        # --- END FIX ---
 
     fig = go.Figure()
     fig.add_trace(go.Scatter(x=xs, y=ys, mode="lines", name="KDE", line=dict(color="blue", width=2)))
@@ -149,7 +100,6 @@ def kde_fig(series, title, user_x=None):
                              fill="toself", opacity=0.2, line=dict(width=0, color="blue"),
                              hoverinfo="skip", name="", showlegend=False))
     
-    # Add percentile lines
     fig.add_vline(x=p25, line=dict(color="red", dash="dot", width=1), 
                   annotation_text="25%", annotation_position="top")
     fig.add_vline(x=p50, line=dict(color="orange", dash="dot", width=1),
@@ -162,7 +112,6 @@ def kde_fig(series, title, user_x=None):
                       annotation_text=f"Your score: {user_x:.1f}",
                       annotation_position="top left")
         
-        # Add performance assessment as subtitle
         fig.update_layout(
             title=f"{title}<br><span style='font-size:14px; color:{band_color}'>{band}</span>",
             xaxis_title="Score", 
@@ -175,10 +124,15 @@ def kde_fig(series, title, user_x=None):
     return fig
 
 # ---------- Visualization Analysis ----------
-st.header("Score Analysis")
+st.header("KDE Distribution Analysis")
 
-# Use st.radio for wider compatibility
-selected = st.radio("Choose subtest or avg", options=["avg"] + subtests, index=0, horizontal=True)
+# Use segmented control; fallback to radio if Streamlit version is old
+try:
+    selected = st.selectbox("Choose subtest or avg",
+                                      options=["avg"] + subtests,
+                                      index=0)
+except Exception:
+    selected = st.radio("Choose subtest or avg", options=["avg"] + subtests, index=0)
 
 # Determine series & user value
 if selected == "avg":
@@ -188,11 +142,6 @@ else:
     series = df_2025[selected]
     user_x = user_scores[selected]
 
-# Create and display stacked plots
-st.subheader("Bar Plot Comparison")
-bar_fig = create_bar_plot(selected, user_scores, user_avg)
-st.plotly_chart(bar_fig, use_container_width=True)
-
-st.subheader("KDE Distribution")
+# Create and display the KDE plot
 kde_fig_plot = kde_fig(series, f"KDE Distribution of {selected} (2025)", user_x=user_x)
 st.plotly_chart(kde_fig_plot, use_container_width=True)
